@@ -81,13 +81,13 @@ function Login({ accounts, onLogin }) {
         <section className="panel login-panel">
           <div className="login-icon">✦</div>
           <h2>Đăng nhập VUONQ</h2>
-          <p className="muted">Nhập tài khoản lớp và PIN được cấp.</p>
+          <p className="muted">Học sinh: username lớp và PIN. Quản trị: email Supabase và mật khẩu.</p>
           <form onSubmit={handleLogin} className="attendance-form">
-            <label htmlFor="login-user">Tên đăng nhập <b>*</b></label>
+            <label htmlFor="login-user">Username lớp / Email quản trị <b>*</b></label>
             <input id="login-user" autoComplete="username" autoFocus value={username}
               onChange={(e) => { setUsername(e.target.value); setError(''); }}
               placeholder="Ví dụ: 113 hoặc 11A2" required />
-            <label htmlFor="login-pin">Mã PIN <b>*</b></label>
+            <label htmlFor="login-pin">PIN / Mật khẩu <b>*</b></label>
             <div className="pin-field">
               <input id="login-pin" type={showPin ? 'text' : 'password'} inputMode="text"
                 autoComplete="current-password" value={pin} maxLength={40}

@@ -15,7 +15,25 @@ function userFrom(headers) {
   if(user.role==='student'&&!user.className)throw Error('Phiên đăng nhập không hợp lệ.');
   return user;
 }
-function constantEqual(a,b) {const x=crypto.createHash('sha256').update(String(a)).digest();const y=crypto.createHash('sha256').update(String(b)).digest();return crypto.timingSafeEqual(x,y);}
+// Supabase Auth chỉ xác thực email/mật khẩu; quyền admin được xác nhận riêng bằng UID.
+async function authenticateAdmin(email, password) {
+  const base = required('SUPABASE_URL').replace(/\/rest\/v1\/?$/, '').replace(/\/$/, '');
+  const publicKey = required('SUPABASE_PUBLISHABLE_KEY');
+  const res = await fetch(`${base}/auth/v1/token?grant_type=password`, {
+    method: 'POST',
+    headers: { apikey: publicKey, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ email, password }),
+    signal: AbortSignal.timeout(12000),
+  });
+  const result = await res.json().catch(() => ({}));
+  if (!res.ok || !result.user?.id) return null;
+  // Tra cứu UID trên máy chủ bằng secret key; tuyệt đối không tin user_metadata.
+  const matches = await supabase('vuonq_admins', {
+    query: { select: 'user_id', user_id: `eq.${result.user.id}`, limit: '1' },
+  });
+  if (!matches.length) return null;
+  return { role: 'admin', username: email.toLowerCase(), adminId: result.user.id };
+}
 async function supabase(path,{method='GET',body,query}={}) {
   const base=required('SUPABASE_URL').replace(/\/rest\/v1\/?$/, '');const secret=required('SUPABASE_SERVICE_ROLE_KEY');
   const url=new URL(`${base.replace(/\/$/,'')}/rest/v1/${path}`);
@@ -38,8 +56,9 @@ export async function handler(event) {
       const username=String(payload.username||'').trim();const pin=String(payload.pin||'');
       if(!username||!pin||username.length>64||pin.length>80)return json(400,{ok:false,error:'Nhập username và PIN hợp lệ.'});
       let user;
-      if(constantEqual(username.toLowerCase(),required('VUONQ_ADMIN_USERNAME').toLowerCase())&&constantEqual(pin,required('VUONQ_ADMIN_PIN')))user={role:'admin',username};
-      else {
+      if(username.includes('@')) {
+        user = await authenticateAdmin(username.toLowerCase(), pin);
+      } else {
         const matched=await supabase('rpc/vuonq_login_class',{method:'POST',body:{p_username:username,p_pin:pin}});
         if(matched?.length)user={role:'student',className:matched[0].class_name};
       }
@@ -75,7 +94,7 @@ export async function handler(event) {
     if(action==='update-account') {
       const className=String(payload.className||'');const username=String(payload.username||'').trim();const pin=String(payload.pin||'');
       if(!className||!username||username.length>64||pin.length<4||pin.length>80)return json(400,{ok:false,error:'Tài khoản hoặc PIN không hợp lệ.'});
-      if(username.toLowerCase()===required('VUONQ_ADMIN_USERNAME').toLowerCase())return json(400,{ok:false,error:'Username trùng admin.'});
+      if(username.includes('@'))return json(400,{ok:false,error:'Username lớp không được chứa @.'});
       await supabase('rpc/vuonq_update_credentials',{method:'POST',body:{p_class_name:className,p_username:username,p_pin:pin}});
       return json(200,{ok:true});
     }
